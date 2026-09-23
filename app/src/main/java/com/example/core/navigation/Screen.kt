@@ -18,6 +18,10 @@ sealed class Screen(val route: String) {
         fun createRoute(transferId: String) = "transfer_detail/$transferId"
     }
     object StorageIntegrity : Screen("storage_integrity")
+    object NearbyDevices : Screen("nearby_devices")
+    object DeviceDetail : Screen("device_detail/{deviceId}") {
+        fun createRoute(deviceId: String) = "device_detail/$deviceId"
+    }
 }
 
 sealed class BottomNavTab(val route: String, val label: String) {

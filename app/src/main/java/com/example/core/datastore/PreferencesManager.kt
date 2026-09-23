@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
@@ -25,6 +26,12 @@ class PreferencesManager(private val context: Context) {
         val KEY_LAST_CONNECTIVITY = stringPreferencesKey("last_connectivity")
         val KEY_FORCED_OFFLINE = booleanPreferencesKey("forced_offline")
         val KEY_STORAGE_PREFERENCE = stringPreferencesKey("storage_preference")
+        val KEY_NEARBY_DISCOVERY_ENABLED = booleanPreferencesKey("nearby_discovery_enabled")
+        val KEY_DEVICE_DISCOVERABLE = booleanPreferencesKey("device_discoverable")
+        val KEY_DEVICE_STABLE_ID = stringPreferencesKey("device_stable_id")
+        val KEY_DEVICE_CUSTOM_NAME = stringPreferencesKey("device_custom_name")
+        val KEY_DEVICE_KEY_REF = stringPreferencesKey("device_key_ref")
+        val KEY_DEVICE_CREATED_AT = androidx.datastore.preferences.core.longPreferencesKey("device_created_at")
     }
 
     private val safeData: Flow<Preferences> = context.dataStore.data
@@ -62,6 +69,57 @@ class PreferencesManager(private val context: Context) {
 
     val safeStoragePreference: Flow<String> = safeData.map { preferences ->
         preferences[KEY_STORAGE_PREFERENCE] ?: "Balanced (2 GB)"
+    }
+
+    val isNearbyDiscoveryEnabled: Flow<Boolean> = safeData.map { preferences ->
+        preferences[KEY_NEARBY_DISCOVERY_ENABLED] ?: false
+    }
+
+    val isDeviceDiscoverable: Flow<Boolean> = safeData.map { preferences ->
+        preferences[KEY_DEVICE_DISCOVERABLE] ?: false
+    }
+
+    val customDeviceName: Flow<String?> = safeData.map { preferences ->
+        preferences[KEY_DEVICE_CUSTOM_NAME]
+    }
+
+    val stableDeviceId: Flow<String?> = safeData.map { preferences ->
+        preferences[KEY_DEVICE_STABLE_ID]
+    }
+
+    suspend fun setNearbyDiscoveryEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_NEARBY_DISCOVERY_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setDeviceDiscoverable(discoverable: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_DEVICE_DISCOVERABLE] = discoverable
+        }
+    }
+
+    suspend fun setCustomDeviceName(name: String) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_DEVICE_CUSTOM_NAME] = name.trim().take(32)
+        }
+    }
+
+    suspend fun setDeviceIdentity(deviceId: String, keyRef: String, createdAt: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[KEY_DEVICE_STABLE_ID] = deviceId
+            preferences[KEY_DEVICE_KEY_REF] = keyRef
+            preferences[KEY_DEVICE_CREATED_AT] = createdAt
+        }
+    }
+
+    suspend fun getDeviceIdentityData(): Triple<String?, String?, Long?> {
+        val prefs = safeData.first()
+        return Triple(
+            prefs[KEY_DEVICE_STABLE_ID],
+            prefs[KEY_DEVICE_KEY_REF],
+            prefs[KEY_DEVICE_CREATED_AT]
+        )
     }
 
     suspend fun setOnboardingCompleted(completed: Boolean) {

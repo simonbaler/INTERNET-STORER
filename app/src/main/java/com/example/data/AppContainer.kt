@@ -44,6 +44,11 @@ interface AppContainer {
     val integrityEngine: com.example.core.storage.StorageIntegrityEngine
     val transferEngine: com.example.core.transfer.TransferEngine
     val transferRepository: com.example.domain.repository.TransferRepository
+    val deviceIdentityManager: com.example.core.identity.DeviceIdentityManager
+    val deviceCapabilityDetector: com.example.core.capabilities.DeviceCapabilityDetector
+    val discoveryPermissionManager: com.example.core.permissions.DiscoveryPermissionManager
+    val nearbyDeviceRepository: com.example.domain.repository.NearbyDeviceRepository
+    val nearbyDiscoveryEngine: com.example.core.discovery.NearbyDiscoveryEngine
 }
 
 class DefaultAppContainer(private val context: Context) : AppContainer {
@@ -147,6 +152,50 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             transferEngine = transferEngine,
             integrityEngine = integrityEngine,
             manifestManager = manifestManager
+        )
+    }
+
+    override val deviceIdentityManager: com.example.core.identity.DeviceIdentityManager by lazy {
+        com.example.core.identity.DeviceIdentityManager(
+            context = context,
+            preferencesManager = preferencesManager,
+            securityManager = securityManager
+        )
+    }
+
+    override val deviceCapabilityDetector: com.example.core.capabilities.DeviceCapabilityDetector by lazy {
+        com.example.core.capabilities.DeviceCapabilityDetector(context)
+    }
+
+    override val discoveryPermissionManager: com.example.core.permissions.DiscoveryPermissionManager by lazy {
+        com.example.core.permissions.DiscoveryPermissionManager(context)
+    }
+
+    override val nearbyDeviceRepository: com.example.domain.repository.NearbyDeviceRepository by lazy {
+        com.example.data.repository.NearbyDeviceRepositoryImpl(
+            nearbyDeviceDao = database.nearbyDeviceDao()
+        )
+    }
+
+    override val nearbyDiscoveryEngine: com.example.core.discovery.NearbyDiscoveryEngine by lazy {
+        val nsdTransport = com.example.core.transport.NsdDiscoveryTransport(
+            context = context,
+            identityManager = deviceIdentityManager
+        )
+        val wifiDirectTransport = com.example.core.transport.WifiDirectDiscoveryTransport(
+            context = context,
+            permissionManager = discoveryPermissionManager
+        )
+        val bleTransport = com.example.core.transport.BleDiscoveryTransport(
+            context = context,
+            permissionManager = discoveryPermissionManager
+        )
+
+        com.example.core.discovery.NearbyDiscoveryEngine(
+            transports = listOf(nsdTransport, wifiDirectTransport, bleTransport),
+            capabilityDetector = deviceCapabilityDetector,
+            permissionManager = discoveryPermissionManager,
+            repository = nearbyDeviceRepository
         )
     }
 }

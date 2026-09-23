@@ -65,6 +65,7 @@ fun MainScreen(
     onNavigateToStorage: () -> Unit,
     onNavigateToOperations: () -> Unit,
     onNavigateToTransfers: () -> Unit = {},
+    onNavigateToNearbyDevices: () -> Unit = {},
     onNavigateToAppearance: () -> Unit,
     onNavigateToPrivacy: () -> Unit,
     onNavigateToAbout: () -> Unit,
@@ -130,7 +131,8 @@ fun MainScreen(
                     onNavigateToMessages = { currentTab = BottomNavTab.Messages.route },
                     onNavigateToFiles = { currentTab = BottomNavTab.Files.route },
                     onNavigateToAI = { currentTab = BottomNavTab.AI.route },
-                    onNavigateToConnectivity = onNavigateToConnectivity
+                    onNavigateToConnectivity = onNavigateToConnectivity,
+                    onNavigateToNearbyDevices = onNavigateToNearbyDevices
                 )
                 BottomNavTab.Messages.route -> MessagesPreviewScreen()
                 BottomNavTab.Files.route -> VaultScreen(
@@ -146,7 +148,8 @@ fun MainScreen(
                     onNavigateToAppearance = onNavigateToAppearance,
                     onNavigateToPrivacy = onNavigateToPrivacy,
                     onNavigateToAbout = onNavigateToAbout,
-                    onResetData = onResetData
+                    onResetData = onResetData,
+                    onNavigateToNearbyDevices = onNavigateToNearbyDevices
                 )
             }
         }

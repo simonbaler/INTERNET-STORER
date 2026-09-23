@@ -33,6 +33,11 @@ import com.example.features.transfers.TransferDetailViewModel
 import com.example.features.transfers.TransfersScreen
 import com.example.features.transfers.TransfersViewModel
 import com.example.features.vault.VaultViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
+import com.example.features.discovery.NearbyDevicesScreen
+import com.example.features.discovery.NearbyDevicesViewModel
+import com.example.features.discovery.DeviceDetailScreen
 
 @Composable
 fun AppNavGraph(
@@ -110,6 +115,9 @@ fun AppNavGraph(
                 },
                 onNavigateToTransfers = {
                     navController.navigate(Screen.Transfers.route)
+                },
+                onNavigateToNearbyDevices = {
+                    navController.navigate(Screen.NearbyDevices.route)
                 },
                 onNavigateToAppearance = {
                     navController.navigate(Screen.SettingsAppearance.route)
@@ -195,6 +203,47 @@ fun AppNavGraph(
             TransferDetailScreen(
                 viewModel = detailViewModel,
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.NearbyDevices.route) {
+            val nearbyViewModel = remember {
+                NearbyDevicesViewModel(appContainer)
+            }
+            NearbyDevicesScreen(
+                viewModel = nearbyViewModel,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToDeviceDetail = { deviceId ->
+                    navController.navigate(Screen.DeviceDetail.createRoute(deviceId))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.DeviceDetail.route,
+            arguments = listOf(navArgument("deviceId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
+            val nearbyViewModel = remember {
+                NearbyDevicesViewModel(appContainer)
+            }
+            val state by nearbyViewModel.uiState.collectAsStateWithLifecycle()
+            val device = state.devices.find { it.deviceId == deviceId } ?: state.selectedDevice
+
+            DeviceDetailScreen(
+                device = device,
+                onNavigateBack = { navController.popBackStack() },
+                onUpdateTrustState = { trustState ->
+                    nearbyViewModel.updateDeviceTrust(deviceId, trustState)
+                },
+                onBlockDevice = {
+                    nearbyViewModel.blockDevice(deviceId)
+                    navController.popBackStack()
+                },
+                onForgetDevice = {
+                    nearbyViewModel.forgetDevice(deviceId)
+                    navController.popBackStack()
+                }
             )
         }
     }

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
@@ -71,7 +72,8 @@ fun SettingsScreen(
     onNavigateToAppearance: () -> Unit,
     onNavigateToPrivacy: () -> Unit,
     onNavigateToAbout: () -> Unit,
-    onResetData: () -> Unit
+    onResetData: () -> Unit,
+    onNavigateToNearbyDevices: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollState = rememberScrollState()
@@ -161,6 +163,17 @@ fun SettingsScreen(
                         tint = RosePrimary,
                         tag = "nav_settings_connectivity",
                         onClick = onNavigateToConnectivity
+                    )
+
+                    SettingsDivider()
+
+                    SettingsRow(
+                        title = "Nearby Devices",
+                        subtitle = "Direct node discovery, radio hardware status",
+                        icon = Icons.Filled.NearMe,
+                        tint = LavenderAccent,
+                        tag = "nav_settings_nearby",
+                        onClick = onNavigateToNearbyDevices
                     )
 
                     SettingsDivider()

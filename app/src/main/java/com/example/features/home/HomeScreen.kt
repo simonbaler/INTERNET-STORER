@@ -81,7 +81,8 @@ fun HomeScreen(
     onNavigateToMessages: () -> Unit,
     onNavigateToFiles: () -> Unit,
     onNavigateToAI: () -> Unit,
-    onNavigateToConnectivity: () -> Unit
+    onNavigateToConnectivity: () -> Unit,
+    onNavigateToNearbyDevices: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showKnowledgeDialog by remember { mutableStateOf(false) }
@@ -294,7 +295,9 @@ fun HomeScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, CardBorderSoft, RoundedCornerShape(20.dp)),
+                    .clickable { onNavigateToNearbyDevices() }
+                    .border(1.dp, CardBorderSoft, RoundedCornerShape(20.dp))
+                    .testTag("quick_action_nearby_discovery"),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
@@ -322,18 +325,18 @@ fun HomeScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Nearby Mesh",
+                                text = "Nearby Devices",
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = DarkCharcoalText
                                 )
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            PhaseBadge(phaseText = "Phase 4 Coming")
+                            PhaseBadge(phaseText = "Phase 4 Active")
                         }
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Device-to-device connectivity coming next. No internet needed.",
+                            text = "Discover local InternetStorer nodes without public Internet.",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = MutedSlate,
                                 fontSize = 12.sp
