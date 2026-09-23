@@ -73,11 +73,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -115,7 +115,7 @@ fun VaultScreen(
     onNavigateToTransfers: () -> Unit = {},
     onBack: (() -> Unit)? = null
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -554,6 +554,9 @@ fun LocalFileItemCard(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val isEncrypted = file.encryptionVersion > 0
+    val formattedDate = remember(file.createdAt) {
+        SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(file.createdAt))
+    }
 
     Card(
         modifier = Modifier
@@ -639,7 +642,7 @@ fun LocalFileItemCard(
                         color = MutedSlate
                     )
                     Text(
-                        text = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(file.createdAt)),
+                        text = formattedDate,
                         style = MaterialTheme.typography.bodySmall,
                         color = MutedSlate
                     )

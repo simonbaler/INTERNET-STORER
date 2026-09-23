@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -151,7 +152,10 @@ fun RomanticHeartBreathing(
         // Heart Icon in center
         Box(
             modifier = Modifier
-                .scale(pulseScale)
+                .graphicsLayer {
+                    scaleX = pulseScale
+                    scaleY = pulseScale
+                }
                 .size(size)
                 .clip(CircleShape)
                 .background(
@@ -325,7 +329,10 @@ fun RomanticButton(
 
     Surface(
         modifier = modifier
-            .scale(scale)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .height(52.dp)
             .testTag("action_button_${text.lowercase().replace(" ", "_")}"),
         shape = RoundedCornerShape(26.dp),

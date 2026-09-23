@@ -322,12 +322,15 @@ class LocalStorageManager(
 
     /**
      * Obtains real device and vault storage breakdown.
+     * If [knownUsedBytes] is provided (e.g. from indexed database aggregation), it avoids
+     * recursive disk traversal, significantly improving UI response time.
      */
     suspend fun getStorageBreakdown(
         reservedLimitBytes: Long,
-        storedFileCount: Int
+        storedFileCount: Int,
+        knownUsedBytes: Long? = null
     ): StorageBreakdown = withContext(Dispatchers.IO) {
-        val usedBytes = calculateVaultUsageBytes()
+        val usedBytes = knownUsedBytes ?: calculateVaultUsageBytes()
         val (deviceTotalBytes, deviceFreeBytes) = try {
             val statFs = StatFs(context.filesDir.path)
             if (statFs.blockCountLong > 0) {

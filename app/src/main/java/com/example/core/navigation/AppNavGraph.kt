@@ -40,6 +40,7 @@ fun AppNavGraph(
     navController: NavHostController = rememberNavController()
 ) {
     val context = LocalContext.current
+    val settingsViewModel = remember { SettingsViewModel(appContainer, context) }
 
     NavHost(
         navController = navController,
@@ -90,7 +91,6 @@ fun AppNavGraph(
 
         composable(Screen.Main.route) {
             val homeViewModel = remember { HomeViewModel(appContainer) }
-            val settingsViewModel = remember { SettingsViewModel(appContainer, context) }
             val vaultViewModel = remember {
                 VaultViewModel(appContainer.localVaultRepository, appContainer.offlineOperationRepository)
             }
@@ -139,7 +139,6 @@ fun AppNavGraph(
         }
 
         composable(Screen.SettingsConnectivity.route) {
-            val settingsViewModel = remember { SettingsViewModel(appContainer, context) }
             ConnectivityScreen(
                 viewModel = settingsViewModel,
                 onNavigateBack = { navController.popBackStack() }
@@ -147,7 +146,6 @@ fun AppNavGraph(
         }
 
         composable(Screen.SettingsStorage.route) {
-            val settingsViewModel = remember { SettingsViewModel(appContainer, context) }
             StorageScreen(
                 viewModel = settingsViewModel,
                 onNavigateBack = { navController.popBackStack() }
@@ -155,7 +153,6 @@ fun AppNavGraph(
         }
 
         composable(Screen.SettingsAppearance.route) {
-            val settingsViewModel = remember { SettingsViewModel(appContainer, context) }
             AppearanceScreen(
                 viewModel = settingsViewModel,
                 onNavigateBack = { navController.popBackStack() }

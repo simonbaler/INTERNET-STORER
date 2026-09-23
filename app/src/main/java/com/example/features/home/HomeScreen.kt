@@ -40,11 +40,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,8 +83,9 @@ fun HomeScreen(
     onNavigateToAI: () -> Unit,
     onNavigateToConnectivity: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showKnowledgeDialog by remember { mutableStateOf(false) }
+    val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
 
     LazyColumn(
         modifier = Modifier
@@ -408,7 +409,7 @@ fun HomeScreen(
                 }
             }
         } else {
-            items(uiState.recentActivities) { activity ->
+            items(uiState.recentActivities, key = { it.id }) { activity ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -452,9 +453,9 @@ fun HomeScreen(
                         )
                     }
 
-                    val formattedTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(
-                        Date(activity.timestamp)
-                    )
+                    val formattedTime = remember(activity.timestamp) {
+                        timeFormatter.format(Date(activity.timestamp))
+                    }
                     Text(
                         text = formattedTime,
                         style = MaterialTheme.typography.labelSmall.copy(color = MutedSlate)

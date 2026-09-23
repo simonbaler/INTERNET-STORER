@@ -36,10 +36,6 @@ class TransfersViewModel(
     private val _userMessage = MutableStateFlow<String?>(null)
     val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
 
-    init {
-        runIntegrityCheck()
-    }
-
     fun pauseTransfer(transferId: String) {
         viewModelScope.launch {
             try {

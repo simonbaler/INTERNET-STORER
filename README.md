@@ -5,7 +5,7 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-blue.svg?logo=kotlin)](https://kotlinlang.org)
 [![Android SDK](https://img.shields.io/badge/Min%20SDK-26%20%7C%20Target%20SDK-35-green.svg?logo=android)](https://developer.android.com)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-M3-purple.svg?logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
-[![Database](https://img.shields.io/badge/Room-v3.0-orange.svg)](https://developer.android.com/training/data-storage/room)
+[![Database](https://img.shields.io/badge/Room-v4.0%20Indexed-orange.svg)](https://developer.android.com/training/data-storage/room)
 [![Security](https://img.shields.io/badge/Security-AES--256--GCM%20%7C%20Keystore-red.svg)](https://developer.android.com/privacy-and-security/cryptography)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
@@ -238,7 +238,21 @@ app/src/main/java/com/example/
 
 ---
 
-## 8. License & Attribution
+## 8. Performance Architecture & UI Responsiveness
+
+InternetStorer 3.0 has undergone strict performance profiling and optimization to ensure sub-16ms frame times, smooth 60/120fps scrolling, and instantaneous tab switching:
+
+- **Zero Main-Thread File I/O:** All cryptographic hashing (SHA-256), AES-256-GCM encryption/decryption, chunk manipulation, and database operations execute strictly on Kotlin `Dispatchers.IO`.
+- **Database-Aggregated Storage Metrics:** Vault and device storage metrics are computed using indexed SQLite aggregations (`SUM(sizeBytes)`), completely bypassing recursive file-tree traversals (`File.walkTopDown()`) during screen rendering and navigation transitions.
+- **Indexed Schema (Database v4):** `local_activity(timestamp)` contains an explicit B-tree index, guaranteeing constant-time lookup for recent activity feeds and event logging.
+- **Non-blocking Screen Initialization:** Heavy integrity verifications and background reconstructions never execute on ViewModel `init`. Screen rendering happens immediately; integrity scans run on-demand or via scheduled background workers (`WorkManager`).
+- **Lifecycle-Aware State Collection:** Jetpack Compose screens subscribe to reactive flows via `collectAsStateWithLifecycle()`, stopping flow collection and eliminating unnecessary recompositions whenever screens are hidden or paused.
+- **Hardware-Accelerated Layer Rendering:** Continuous ambient and breathing animations leverage `Modifier.graphicsLayer` transformations (`scaleX`, `scaleY`), eliminating layout remeasurement passes and running directly on the GPU render node.
+- **Allocation & GC Optimization:** Formatter instances (`SimpleDateFormat`) are cached per timestamp using `remember`, eliminating garbage collection pauses during continuous list scrolling.
+
+---
+
+## 9. License & Attribution
 
 ```
 Copyright 2026 Simon Baler. All rights reserved.

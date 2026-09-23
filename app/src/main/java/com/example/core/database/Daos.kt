@@ -93,6 +93,9 @@ interface LocalFileDao {
     @Query("SELECT COALESCE(SUM(sizeBytes), 0) FROM local_files WHERE status != 'DELETED'")
     fun getTotalBytesUsed(): Flow<Long>
 
+    @Query("SELECT COALESCE(SUM(sizeBytes), 0) FROM local_files WHERE status != 'DELETED'")
+    suspend fun getTotalBytesUsedOnce(): Long
+
     @Query("SELECT COUNT(*) FROM local_files WHERE status != 'DELETED'")
     fun getFileCount(): Flow<Int>
 

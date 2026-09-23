@@ -24,7 +24,12 @@ data class AppSettings(
     val lastBackupTimestamp: Long = 0L
 )
 
-@Entity(tableName = "local_activity")
+@Entity(
+    tableName = "local_activity",
+    indices = [
+        Index(value = ["timestamp"])
+    ]
+)
 data class LocalActivity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val title: String,

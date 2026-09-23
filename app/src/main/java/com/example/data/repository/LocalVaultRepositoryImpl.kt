@@ -169,12 +169,21 @@ class LocalVaultRepositoryImpl(
         combine(
             preferencesManager.safeStoragePreference,
             localFileDao.getFileCount(),
+            localFileDao.getTotalBytesUsed(),
             storageRecordDao.getRecordByIdFlow("VAULT_FILES")
-        ) { pref, count, _ ->
+        ) { pref, count, dbUsedBytes, storageRecord ->
             val reservedBytes = parseStoragePreferenceToBytes(pref)
+            val effectiveUsed = if (dbUsedBytes > 0L) {
+                dbUsedBytes
+            } else if ((storageRecord?.bytesUsed ?: 0L) > 0L) {
+                storageRecord?.bytesUsed ?: 0L
+            } else {
+                null
+            }
             storageManager.getStorageBreakdown(
                 reservedLimitBytes = reservedBytes,
-                storedFileCount = count
+                storedFileCount = count,
+                knownUsedBytes = effectiveUsed
             )
         }.flowOn(Dispatchers.IO)
 
