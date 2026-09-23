@@ -18,6 +18,7 @@ sealed class VaultError(val userMessage: String) : Exception(userMessage) {
     class DecryptionFailure(message: String = "Could not decrypt local data. Corrupted payload or invalid key.") : VaultError(message)
     class InvalidFileName(val fileName: String, message: String = "Invalid file name: contains forbidden characters or is empty.") : VaultError(message)
     class PathTraversalAttempt(val path: String, message: String = "Security violation: Path traversal detected and prevented.") : VaultError(message)
+    class InvalidTransferState(val fromState: String, val toState: String, message: String = "Illegal state transition from $fromState to $toState") : VaultError(message)
     class DatabaseFailure(message: String = "Local database write failed.") : VaultError(message)
     class OperationAlreadyProcessing(val opId: String, message: String = "Operation is already in processing state.") : VaultError(message)
     class OperationCancelled(val opId: String, message: String = "Operation was cancelled.") : VaultError(message)

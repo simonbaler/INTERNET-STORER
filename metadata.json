@@ -1,6 +1,6 @@
 {
-  "name": "Remix InternetStorer",
-  "description": "AI-Powered Digital Continuity Network keeping your important digital resources available offline.",
+  "name": "InternetStorer",
+  "description": "Secure Local File System & Resumable Transfer Engine keeping your vital data safe and available offline.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

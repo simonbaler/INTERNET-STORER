@@ -48,16 +48,20 @@ class FileManifestManager {
         try {
             val json = JSONObject(trimmed)
 
-            val schemaVersion = if (json.has("schemaVersion")) json.getInt("schemaVersion") else 1
-            if (schemaVersion > CURRENT_SCHEMA_VERSION) {
-                throw VaultError.InvalidManifest("Unsupported schema version $schemaVersion (maximum supported: $CURRENT_SCHEMA_VERSION)")
+            if (!json.has("fileId") || !json.has("contentHash") || !json.has("sizeBytes") || !json.has("filename")) {
+                throw VaultError.InvalidManifest("Missing required manifest fields (fileId, contentHash, sizeBytes, filename)")
             }
 
-            val fileId = json.optString("fileId", "")
-            val contentHash = json.optString("contentHash", "")
-            val sizeBytes = json.optLong("sizeBytes", -1L)
+            val schemaVersion = if (json.has("schemaVersion")) json.getInt("schemaVersion") else 1
+            if (schemaVersion < 1 || schemaVersion > CURRENT_SCHEMA_VERSION) {
+                throw VaultError.InvalidManifest("Unsupported schema version $schemaVersion (supported: 1..$CURRENT_SCHEMA_VERSION)")
+            }
+
+            val fileId = json.getString("fileId")
+            val contentHash = json.getString("contentHash")
+            val sizeBytes = json.getLong("sizeBytes")
             val mimeType = json.optString("mimeType", "application/octet-stream")
-            val filename = json.optString("filename", "")
+            val filename = json.getString("filename")
             val version = json.optInt("version", 1)
             val encryptionMetadata = json.optString("encryptionMetadata", "NONE")
             val chunkSize = json.optInt("chunkSize", DEFAULT_CHUNK_SIZE)
@@ -91,6 +95,9 @@ class FileManifestManager {
      * Validates semantic constraints of a manifest.
      */
     fun validate(manifest: FileManifest) {
+        if (manifest.schemaVersion < 1 || manifest.schemaVersion > CURRENT_SCHEMA_VERSION) {
+            throw VaultError.InvalidManifest("Unsupported schema version: ${manifest.schemaVersion}")
+        }
         if (manifest.fileId.isBlank()) {
             throw VaultError.InvalidManifest("fileId cannot be blank")
         }
@@ -109,6 +116,12 @@ class FileManifestManager {
         }
         if (manifest.filename.isBlank()) {
             throw VaultError.InvalidManifest("filename cannot be blank")
+        }
+        if (manifest.filename.contains('\u0000') || manifest.filename.contains('\r') || manifest.filename.contains('\n') || manifest.filename.contains("..")) {
+            throw VaultError.InvalidManifest("filename contains forbidden control characters or path traversal sequences")
+        }
+        if (manifest.encryptionMetadata != "NONE" && manifest.encryptionMetadata != "AES_256_GCM") {
+            throw VaultError.InvalidManifest("Unsupported or invalid encryption metadata: ${manifest.encryptionMetadata}")
         }
         if (manifest.version < 1) {
             throw VaultError.InvalidManifest("version must be >= 1")

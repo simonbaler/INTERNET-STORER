@@ -27,21 +27,19 @@ class LocalStorageManager(
 
     private val writeMutex = Mutex()
 
-    val vaultRoot: File by lazy {
-        File(context.filesDir, "internet_storer_vault").apply {
+    val vaultRoot: File
+        get() = File(context.filesDir, "internet_storer_vault").apply {
             if (!exists()) {
                 mkdirs()
             }
         }
-    }
 
-    val tmpDir: File by lazy {
-        File(vaultRoot, ".tmp").apply {
+    val tmpDir: File
+        get() = File(vaultRoot, ".tmp").apply {
             if (!exists()) {
                 mkdirs()
             }
         }
-    }
 
     init {
         // Ensure subdirectories exist
@@ -194,7 +192,7 @@ class LocalStorageManager(
 
                 // Atomic rename/move into final location
                 val success = stageFile.renameTo(targetFile)
-                if (!success) {
+                if (!success && stageFile.exists()) {
                     // Fallback copy if rename across mount fails
                     stageFile.copyTo(targetFile, overwrite = true)
                     stageFile.delete()
@@ -372,7 +370,8 @@ class LocalStorageManager(
         if (parent != null && !parent.exists()) {
             parent.mkdirs()
         }
-        if (!source.renameTo(targetFile)) {
+        val success = source.renameTo(targetFile)
+        if (!success && source.exists()) {
             // Fallback to copy and delete if cross-filesystem move occurs
             source.inputStream().use { input ->
                 targetFile.outputStream().use { output ->

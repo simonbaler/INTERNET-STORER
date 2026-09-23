@@ -129,13 +129,17 @@ class TransferEngine(
             }
 
             // Room persistence
-            database.fileManifestDao().insertOrUpdate(manifestEntity)
             database.transferDao().insertOrUpdate(transfer)
+
+            // Transition from CREATED to PREPARING
+            database.transferDao().transitionState(transferId, "CREATED", "PREPARING")
+
+            database.fileManifestDao().insertOrUpdate(manifestEntity)
             database.transferChunkDao().insertChunks(transferChunkEntities)
             database.fileChunkDao().insertChunks(fileChunkEntities)
 
-            // Transition from CREATED to TRANSFERRING
-            database.transferDao().updateTransferState(transferId, "TRANSFERRING")
+            // Transition from PREPARING to TRANSFERRING
+            database.transferDao().transitionState(transferId, "PREPARING", "TRANSFERRING")
             database.transferDao().updateTransferProgress(transferId, file.length(), totalChunks)
 
             mapToRecord(transfer.copy(state = "TRANSFERRING", verifiedChunks = totalChunks, transferredBytes = file.length()))
@@ -207,12 +211,13 @@ class TransferEngine(
                 modifiedAt = manifest.modifiedAt
             )
 
-            database.fileManifestDao().insertOrUpdate(manifestEntity)
             database.transferDao().insertOrUpdate(transferEntity)
-            database.transferChunkDao().insertChunks(chunkEntities)
 
-            // Transition to PREPARING
-            database.transferDao().updateTransferState(transferId, "PREPARING")
+            // Transition from CREATED to PREPARING
+            database.transferDao().transitionState(transferId, "CREATED", "PREPARING")
+
+            database.fileManifestDao().insertOrUpdate(manifestEntity)
+            database.transferChunkDao().insertChunks(chunkEntities)
 
             // Ensure staging file exists
             val stagingFile = getStagingFile(transferId)
@@ -221,8 +226,8 @@ class TransferEngine(
             }
             stagingFile.createNewFile()
 
-            // Transition to TRANSFERRING
-            database.transferDao().updateTransferState(transferId, "TRANSFERRING")
+            // Transition from PREPARING to TRANSFERRING
+            database.transferDao().transitionState(transferId, "PREPARING", "TRANSFERRING")
 
             mapToRecord(transferEntity.copy(state = "TRANSFERRING"))
         }
@@ -230,6 +235,7 @@ class TransferEngine(
 
     /**
      * Writes and verifies an individual chunk into the reconstruction staging file.
+     * Prevents duplicate chunk processing by concurrent workers.
      */
     suspend fun writeAndVerifyChunk(
         transferId: String,
@@ -244,19 +250,25 @@ class TransferEngine(
             ?: throw VaultError.FileNotFound(transferId, "Transfer record not found")
 
         val currentState = TransferState.valueOf(transfer.state)
-        if (currentState == TransferState.PAUSED || currentState == TransferState.CANCELLED) {
+        if (currentState != TransferState.TRANSFERRING) {
             throw VaultError.InterruptedTransfer(transferId, "Cannot write chunk to a ${transfer.state} transfer")
         }
 
         val chunk = chunkDao.getChunk(transferId, chunkIndex)
             ?: throw VaultError.InvalidChunk(chunkIndex, "Chunk record not found for transfer $transferId")
 
-        // If chunk is already verified, skip writing
+        // If chunk is already verified, skip duplicate write
         if (chunk.status == "VERIFIED") {
             return@withContext true
         }
 
-        chunkDao.updateChunkStatus(transferId, chunkIndex, "PROCESSING")
+        // Atomically claim chunk for processing
+        val claimed = chunkDao.claimChunkForProcessing(transferId, chunkIndex)
+        if (claimed == 0) {
+            // Already claimed by another concurrent worker or already verified
+            val currentChunk = chunkDao.getChunk(transferId, chunkIndex)
+            return@withContext currentChunk?.status == "VERIFIED"
+        }
 
         val stagingFile = getStagingFile(transferId)
         val hashToVerify = if (chunk.chunkHash.isNotBlank()) chunk.chunkHash else expectedHash
@@ -274,9 +286,9 @@ class TransferEngine(
             val now = System.currentTimeMillis()
             chunkDao.updateChunkStatus(transferId, chunkIndex, "VERIFIED", now)
 
-            // Update transfer progress
+            // Update transfer progress using exact sum of verified chunk lengths
             val verifiedCount = chunkDao.getVerifiedChunkCount(transferId)
-            val transferredBytes = minOf(transfer.totalBytes, verifiedCount.toLong() * transfer.chunkSize)
+            val transferredBytes = chunkDao.getSumVerifiedChunkLengths(transferId)
             transferDao.updateTransferProgress(transferId, transferredBytes, verifiedCount)
 
             true
@@ -301,6 +313,20 @@ class TransferEngine(
             val transfer = transferDao.getTransferByIdOnce(transferId)
                 ?: throw VaultError.FileNotFound(transferId, "Transfer $transferId not found")
 
+            // Atomic state transition: TRANSFERRING -> VERIFYING
+            val transitioned = transferDao.transitionState(transferId, "TRANSFERRING", "VERIFYING")
+            if (transitioned == 0) {
+                if (transfer.state == "COMPLETED") {
+                    val existing = fileDao.getFileByIdOnce(transfer.fileId)
+                    if (existing != null) return@withLock existing
+                }
+                throw VaultError.InvalidTransferState(
+                    transfer.state,
+                    "VERIFYING",
+                    "Cannot finalize transfer $transferId from state ${transfer.state}"
+                )
+            }
+
             val manifestEntity = manifestDao.getManifestOnce(transfer.fileId)
                 ?: throw VaultError.InvalidManifest("No manifest found for file ${transfer.fileId}")
 
@@ -309,23 +335,24 @@ class TransferEngine(
             // Verify all chunks are marked VERIFIED
             val verifiedCount = chunkDao.getVerifiedChunkCount(transferId)
             if (verifiedCount != transfer.totalChunks) {
+                transferDao.transitionState(transferId, "VERIFYING", "FAILED")
+                transferDao.markFailed(transferId, "Reconstruction incomplete: $verifiedCount / ${transfer.totalChunks} chunks verified")
                 throw VaultError.InvalidChunk(
                     verifiedCount,
                     "Reconstruction incomplete: $verifiedCount / ${transfer.totalChunks} chunks verified"
                 )
             }
 
-            // Transition to VERIFYING state
-            transferDao.updateTransferState(transferId, "VERIFYING")
-
             val stagingFile = getStagingFile(transferId)
             if (!stagingFile.exists()) {
+                transferDao.transitionState(transferId, "VERIFYING", "FAILED")
                 transferDao.markFailed(transferId, "Staging file missing for reconstruction")
                 throw VaultError.MissingSourceFile(stagingFile.absolutePath)
             }
 
             // 1. Verify size
             if (stagingFile.length() != manifest.sizeBytes) {
+                transferDao.transitionState(transferId, "VERIFYING", "FAILED")
                 transferDao.markFailed(transferId, "Final size mismatch: expected ${manifest.sizeBytes}, got ${stagingFile.length()}")
                 throw VaultError.IntegrityMismatch(
                     expectedHash = "size:${manifest.sizeBytes}",
@@ -337,6 +364,7 @@ class TransferEngine(
             // 2. Verify whole-file SHA-256 via streaming 8 KB read
             val finalHash = chunkEngine.calculateStreamingFileHash(stagingFile)
             if (!finalHash.equals(manifest.contentHash, ignoreCase = true)) {
+                transferDao.transitionState(transferId, "VERIFYING", "FAILED")
                 transferDao.markFailed(transferId, "Final SHA-256 integrity mismatch: expected ${manifest.contentHash}, got $finalHash")
                 throw VaultError.IntegrityMismatch(
                     expectedHash = manifest.contentHash,
@@ -380,6 +408,20 @@ class TransferEngine(
             )
 
             fileDao.insert(localFile)
+            database.fileVersionDao().insertVersion(
+                com.example.core.database.FileVersionEntity(
+                    versionId = UUID.randomUUID().toString(),
+                    fileId = manifest.fileId,
+                    versionNumber = manifest.version,
+                    contentHash = finalHash,
+                    sizeBytes = targetFile.length(),
+                    modifiedAt = now,
+                    changeDescription = "Reconstructed from verified chunks"
+                )
+            )
+
+            // Atomic state transition: VERIFYING -> COMPLETED
+            transferDao.transitionState(transferId, "VERIFYING", "COMPLETED")
             transferDao.markCompleted(transferId, now)
 
             localFile
@@ -391,14 +433,8 @@ class TransferEngine(
      */
     suspend fun pauseTransfer(transferId: String): Boolean = withContext(Dispatchers.IO) {
         val transferDao = database.transferDao()
-        val transfer = transferDao.getTransferByIdOnce(transferId) ?: return@withContext false
-        val state = TransferState.valueOf(transfer.state)
-        if (state.canTransitionTo(TransferState.PAUSED)) {
-            transferDao.updateTransferState(transferId, TransferState.PAUSED.name)
-            true
-        } else {
-            false
-        }
+        val updated = transferDao.transitionState(transferId, "TRANSFERRING", TransferState.PAUSED.name)
+        updated > 0
     }
 
     /**
@@ -406,14 +442,12 @@ class TransferEngine(
      */
     suspend fun resumeTransfer(transferId: String): Boolean = withContext(Dispatchers.IO) {
         val transferDao = database.transferDao()
-        val transfer = transferDao.getTransferByIdOnce(transferId) ?: return@withContext false
-        val state = TransferState.valueOf(transfer.state)
-        if (state == TransferState.PAUSED || state == TransferState.INTERRUPTED || state == TransferState.FAILED) {
-            transferDao.updateTransferState(transferId, TransferState.TRANSFERRING.name)
-            true
-        } else {
-            false
-        }
+        val updated = transferDao.transitionStateFromAllowed(
+            transferId,
+            listOf("PAUSED", "INTERRUPTED", "FAILED"),
+            TransferState.TRANSFERRING.name
+        )
+        updated > 0
     }
 
     /**
@@ -421,10 +455,12 @@ class TransferEngine(
      */
     suspend fun cancelTransfer(transferId: String): Boolean = withContext(Dispatchers.IO) {
         val transferDao = database.transferDao()
-        val transfer = transferDao.getTransferByIdOnce(transferId) ?: return@withContext false
-        val state = TransferState.valueOf(transfer.state)
-        if (!state.isTerminal()) {
-            transferDao.updateTransferState(transferId, TransferState.CANCELLED.name)
+        val updated = transferDao.transitionStateFromAllowed(
+            transferId,
+            listOf("CREATED", "PREPARING", "TRANSFERRING", "PAUSED", "INTERRUPTED", "FAILED"),
+            TransferState.CANCELLED.name
+        )
+        if (updated > 0) {
             val stagingFile = getStagingFile(transferId)
             if (stagingFile.exists()) {
                 stagingFile.delete()
@@ -444,12 +480,26 @@ class TransferEngine(
         val inFlightTransfers = transferDao.getResumableTransfers()
         var recovered = 0
         for (t in inFlightTransfers) {
-            val state = TransferState.valueOf(t.state)
-            if (state == TransferState.TRANSFERRING || state == TransferState.PREPARING) {
-                transferDao.updateTransferState(t.transferId, TransferState.INTERRUPTED.name)
-                recovered++
+            if (t.state == "TRANSFERRING" || t.state == "PREPARING") {
+                val updated = transferDao.transitionStateFromAllowed(
+                    t.transferId,
+                    listOf("PREPARING", "TRANSFERRING"),
+                    TransferState.INTERRUPTED.name
+                )
+                if (updated > 0) recovered++
             }
         }
+
+        // Clean up abandoned staging files older than 24 hours
+        try {
+            val cutoff = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
+            localStorageManager.tmpDir.listFiles()?.forEach { file ->
+                if (file.name.startsWith("reconstruct_") && file.lastModified() < cutoff) {
+                    file.delete()
+                }
+            }
+        } catch (_: Exception) {}
+
         recovered
     }
 

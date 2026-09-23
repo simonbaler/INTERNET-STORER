@@ -6,7 +6,10 @@ import com.example.domain.model.IntegrityIssue
 import com.example.domain.model.IntegrityIssueType
 import com.example.domain.model.StorageIntegrityReport
 import com.example.domain.model.VaultError
+import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
@@ -17,6 +20,8 @@ class StorageIntegrityEngine(
     private val localStorageManager: LocalStorageManager,
     private val chunkEngine: ChunkEngine
 ) {
+
+    private val engineMutex = Mutex()
 
     /**
      * Executes a thorough integrity check across Room database metadata and on-disk files.
@@ -129,58 +134,76 @@ class StorageIntegrityEngine(
         existingFile: LocalFile,
         newDisplayName: String
     ): LocalFile = withContext(Dispatchers.IO) {
-        val fileDao = database.localFileDao()
-        val sanitizedName = localStorageManager.sanitizeFileName(newDisplayName)
+        engineMutex.withLock {
+            database.withTransaction {
+                val fileDao = database.localFileDao()
+                val sanitizedName = localStorageManager.sanitizeFileName(newDisplayName)
 
-        // Increment reference count on the primary physical file
-        fileDao.incrementReferenceCount(existingFile.id)
+                val activeBefore = fileDao.getActiveFilesByPath(existingFile.relativePath)
+                val newRefCount = activeBefore.size + 1
 
-        val duplicateRecord = LocalFile(
-            id = UUID.randomUUID().toString(),
-            displayName = sanitizedName,
-            originalName = newDisplayName,
-            relativePath = existingFile.relativePath, // Shares same physical file safely
-            mimeType = existingFile.mimeType,
-            sizeBytes = existingFile.sizeBytes,
-            createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis(),
-            contentHash = existingFile.contentHash,
-            encryptionVersion = existingFile.encryptionVersion,
-            status = "STORED",
-            isPinned = false,
-            referenceCount = 1,
-            version = 1
-        )
-        fileDao.insert(duplicateRecord)
-        duplicateRecord
+                val duplicateRecord = LocalFile(
+                    id = UUID.randomUUID().toString(),
+                    displayName = sanitizedName,
+                    originalName = newDisplayName,
+                    relativePath = existingFile.relativePath, // Shares same physical file safely
+                    mimeType = existingFile.mimeType,
+                    sizeBytes = existingFile.sizeBytes,
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                    contentHash = existingFile.contentHash,
+                    encryptionVersion = existingFile.encryptionVersion,
+                    status = "STORED",
+                    isPinned = false,
+                    referenceCount = newRefCount,
+                    version = 1
+                )
+                fileDao.insert(duplicateRecord)
+
+                // Update all active references sharing this physical file
+                for (ref in activeBefore) {
+                    fileDao.setReferenceCount(ref.id, newRefCount)
+                }
+
+                duplicateRecord
+            }
+        }
     }
 
     /**
      * Safe deletion respecting reference counting.
      * Deletes the physical file only when no other references remain.
+     * Guaranteed non-negative reference counts and thread-safe.
      */
     suspend fun safeDeleteFile(fileId: String): Boolean = withContext(Dispatchers.IO) {
-        val fileDao = database.localFileDao()
-        val fileRecord = fileDao.getFileByIdOnce(fileId) ?: return@withContext false
+        engineMutex.withLock {
+            database.withTransaction {
+                val fileDao = database.localFileDao()
+                val fileRecord = fileDao.getFileByIdOnce(fileId) ?: return@withTransaction false
+                if (fileRecord.status == "DELETED") return@withTransaction true
 
-        // Mark this record as DELETED
-        fileDao.updateStatus(fileId, "DELETED")
+                // Mark this record as DELETED and set its reference count to 0
+                fileDao.updateStatus(fileId, "DELETED")
+                fileDao.setReferenceCount(fileId, 0)
 
-        // Find all records that point to the same relativePath
-        val allReferences = fileDao.getAllStoredFilesOnce().filter {
-            it.relativePath == fileRecord.relativePath && it.status != "DELETED"
-        }
+                // Find all active records pointing to the same relativePath
+                val activeRemaining = fileDao.getActiveFilesByPath(fileRecord.relativePath)
+                val remainingCount = activeRemaining.size
 
-        if (allReferences.isEmpty()) {
-            // No references remain; safely delete physical file from disk
-            localStorageManager.deleteFile(fileRecord.relativePath)
-        } else {
-            // References still exist; decrement reference count on remaining records
-            allReferences.forEach { ref ->
-                fileDao.decrementReferenceCount(ref.id)
+                if (remainingCount == 0) {
+                    // No references remain; safely delete physical file from disk
+                    try {
+                        localStorageManager.deleteFile(fileRecord.relativePath)
+                    } catch (_: Exception) {}
+                } else {
+                    // Synchronize reference count on all remaining active records
+                    for (ref in activeRemaining) {
+                        fileDao.setReferenceCount(ref.id, remainingCount)
+                    }
+                }
+                true
             }
         }
-        true
     }
 
     /**

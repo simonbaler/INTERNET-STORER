@@ -107,6 +107,15 @@ interface LocalFileDao {
 
     @Query("UPDATE local_files SET referenceCount = CASE WHEN referenceCount > 0 THEN referenceCount - 1 ELSE 0 END, updatedAt = :updatedAt WHERE id = :id")
     suspend fun decrementReferenceCount(id: String, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("SELECT * FROM local_files WHERE relativePath = :relativePath AND status != 'DELETED'")
+    suspend fun getActiveFilesByPath(relativePath: String): List<LocalFile>
+
+    @Query("UPDATE local_files SET referenceCount = :refCount, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun setReferenceCount(id: String, refCount: Int, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("SELECT referenceCount FROM local_files WHERE id = :id")
+    suspend fun getReferenceCount(id: String): Int?
 }
 
 @Dao
@@ -258,6 +267,12 @@ interface TransferDao {
     @Query("UPDATE transfers SET state = :state, updatedAt = :updatedAt WHERE transferId = :transferId")
     suspend fun updateTransferState(transferId: String, state: String, updatedAt: Long = System.currentTimeMillis())
 
+    @Query("UPDATE transfers SET state = :newState, updatedAt = :updatedAt WHERE transferId = :transferId AND state = :expectedState")
+    suspend fun transitionState(transferId: String, expectedState: String, newState: String, updatedAt: Long = System.currentTimeMillis()): Int
+
+    @Query("UPDATE transfers SET state = :newState, updatedAt = :updatedAt WHERE transferId = :transferId AND state IN (:allowedStates)")
+    suspend fun transitionStateFromAllowed(transferId: String, allowedStates: List<String>, newState: String, updatedAt: Long = System.currentTimeMillis()): Int
+
     @Query("UPDATE transfers SET transferredBytes = :transferredBytes, verifiedChunks = :verifiedChunks, updatedAt = :updatedAt WHERE transferId = :transferId")
     suspend fun updateTransferProgress(
         transferId: String,
@@ -290,6 +305,9 @@ interface TransferChunkDao {
     @Query("SELECT * FROM transfer_chunks WHERE transferId = :transferId AND chunkIndex = :chunkIndex LIMIT 1")
     suspend fun getChunk(transferId: String, chunkIndex: Int): TransferChunkEntity?
 
+    @Query("UPDATE transfer_chunks SET status = 'PROCESSING' WHERE transferId = :transferId AND chunkIndex = :chunkIndex AND status IN ('PENDING', 'FAILED')")
+    suspend fun claimChunkForProcessing(transferId: String, chunkIndex: Int): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChunks(chunks: List<TransferChunkEntity>)
 
@@ -303,6 +321,9 @@ interface TransferChunkDao {
 
     @Query("SELECT COUNT(*) FROM transfer_chunks WHERE transferId = :transferId AND status = 'VERIFIED'")
     suspend fun getVerifiedChunkCount(transferId: String): Int
+
+    @Query("SELECT COALESCE(SUM(length), 0) FROM transfer_chunks WHERE transferId = :transferId AND status = 'VERIFIED'")
+    suspend fun getSumVerifiedChunkLengths(transferId: String): Long
 
     @Query("DELETE FROM transfer_chunks WHERE transferId = :transferId")
     suspend fun deleteChunksForTransfer(transferId: String)
