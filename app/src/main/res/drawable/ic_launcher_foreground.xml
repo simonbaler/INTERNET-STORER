@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Connectivity waves around heart -->
+    <path
+        android:pathData="M34,42 C38,32 70,32 74,42"
+        android:strokeWidth="2.5"
+        android:strokeColor="#FF758F"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M27,37 C34,23 74,23 81,37"
+        android:strokeWidth="2.5"
+        android:strokeColor="#C77DFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Romantic Heart Shape with rich gradient fill -->
+    <path
+        android:pathData="M54,77 C52.5,75.5 31,56.5 31,44 C31,37.5 36,32.5 42.5,32.5 C46.5,32.5 50.5,34.5 54,38 C57.5,34.5 61.5,32.5 65.5,32.5 C72,32.5 77,37.5 77,44 C77,56.5 55.5,75.5 54,77 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="31"
+                android:startY="32"
+                android:endX="77"
+                android:endY="77"
+                android:type="linear">
+                <item android:color="#FF5D8F" android:offset="0.0" />
+                <item android:color="#FF758F" android:offset="0.5" />
+                <item android:color="#E05780" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Inner connectivity node: glowing central pulse dot & micro wave -->
+    <path
+        android:pathData="M54,50m-3.5,0a3.5,3.5 0 1,1 7,0a3.5,3.5 0 1,1 -7,0"
+        android:fillColor="#FFFFFF" />
+    <path
+        android:pathData="M48,56 C51,59 57,59 60,56"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>
